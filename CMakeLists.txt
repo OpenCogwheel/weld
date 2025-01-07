@@ -1,0 +1,11 @@
+CMAKE_MINIMUM_REQUIRED(VERSION 3.10)
+
+PROJECT(weld)
+
+FILE(GLOB SOURCES
+    "src/**.cpp"
+)
+
+LINK_DIRECTORIES(/path/to/reproc/lib)
+
+ADD_EXECUTABLE(weld ${SOURCES})
