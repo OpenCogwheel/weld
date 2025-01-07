@@ -22,18 +22,25 @@ std::vector<std::filesystem::path> get_args_with_extension(const std::filesystem
     return result;
 }
 
-void build_project_gcc(std::string src_dir, std::string out_dir, std::string proj_name) {
+void build_project_gcc(
+    std::string src_dir,
+    std::string out_dir,
+    std::string proj_name,
+    std::vector<std::string> cflags,
+    std::vector<std::string> lflags
+) {
     std::string srcd = std::filesystem::current_path().string() + "/" + src_dir;
     std::string outd = std::filesystem::current_path().string() + "/" + out_dir;
     
     std::filesystem::create_directory(outd);
     std::filesystem::create_directory(outd + "/int");
     
-    std::vector<std::filesystem::path> files = get_args_with_extension(srcd, ".cpp");
+    std::vector<std::filesystem::path> files = get_args_with_extension(srcd, ".c");
     #ifdef __linux__
         for (auto file : files) {
             boost::process::system(
                 "/usr/bin/gcc",
+                boost::process::args(cflags),
                 boost::process::args({
                     "-c", file,
                     "-o", outd + "/int/" + file.replace_extension(".o").filename().string()
@@ -47,6 +54,47 @@ void build_project_gcc(std::string src_dir, std::string out_dir, std::string pro
         
         boost::process::system(
             "/usr/bin/gcc",
+            boost::process::args(lflags),
+            boost::process::args(files),
+            boost::process::args({"-o", outd + "/" + proj_name})
+        );
+    #endif
+    
+}
+
+void build_project_gpp(
+    std::string src_dir,
+    std::string out_dir,
+    std::string proj_name,
+    std::vector<std::string> cflags,
+    std::vector<std::string> lflags
+) {
+    std::string srcd = std::filesystem::current_path().string() + "/" + src_dir;
+    std::string outd = std::filesystem::current_path().string() + "/" + out_dir;
+    
+    std::filesystem::create_directory(outd);
+    std::filesystem::create_directory(outd + "/int");
+    
+    std::vector<std::filesystem::path> files = get_args_with_extension(srcd, ".cpp");
+    #ifdef __linux__
+        for (auto file : files) {
+            boost::process::system(
+                "/usr/bin/g++",
+                boost::process::args(cflags),
+                boost::process::args({
+                    "-c", file,
+                    "-o", outd + "/int/" + file.replace_extension(".o").filename().string()
+                })
+            );
+        }
+        
+        for (auto file : files) {
+            file = std::filesystem::path(outd + "/int/").concat(file.replace_extension(".o").filename().string());
+        }
+        
+        boost::process::system(
+            "/usr/bin/g++",
+            boost::process::args(lflags),
             boost::process::args(files),
             boost::process::args({"-o", outd + "/" + proj_name})
         );
@@ -62,6 +110,8 @@ void build_project(std::string path) {
     std::string out_dir;
     
     std::string toolset;
+    std::vector<std::string> cflags;
+    std::vector<std::string> lflags;
     if (weld_build_data.contains("project")) {
         auto project_data = toml::find(weld_build_data, "project");
         project_name = toml::find<std::string>(project_data, "name");
@@ -85,8 +135,26 @@ void build_project(std::string path) {
         std::cout << "toolset: " << toolset << std::endl;
     }
     
-    if (toolset == "gcc") {
-        build_project_gcc(src_dir, out_dir, project_name);
+    if (toolset == "gcc" || toolset == "g++") {
+        if (weld_build_data.contains("gnuc")) {
+            auto gnuc_data = toml::find(weld_build_data, "gnuc");
+           
+            if (gnuc_data.contains("cflags")) {
+                cflags = toml::find<std::vector<std::string>>(gnuc_data, "cflags");
+            }
+            
+            if (gnuc_data.contains("lflags")) {
+                lflags = toml::find<std::vector<std::string>>(gnuc_data, "lflags");
+            }
+        }
+        
+        if (toolset == "gcc") {
+            build_project_gcc(src_dir, out_dir, project_name, cflags, lflags);
+        } else if (toolset == "g++") {
+            build_project_gpp(src_dir, out_dir, project_name, cflags, lflags);
+        }
+    } else {
+        std::cerr << "error: invalid toolset!" << std::endl;
     }
 }
 

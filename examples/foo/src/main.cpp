@@ -1,3 +1,5 @@
+#include <iostream>
+
 int main() {
-    return 32;
+    std::cout << "Hello!" << std::endl;
 }

@@ -2,7 +2,10 @@
 name = "foo"
 
 [settings]
-toolset = "gcc"
-
+toolset = "g++"
 src_dir = "src"
 out_dir = "out"
+
+[gnuc]
+#cflags = ["-O2"]
+#lflags = [""]
