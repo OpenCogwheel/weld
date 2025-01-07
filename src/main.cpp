@@ -154,7 +154,7 @@ void build_project(std::string path) {
             build_project_gpp(src_dir, out_dir, project_name, cflags, lflags);
         }
     } else {
-        std::cerr << "error: invalid toolset!" << std::endl;
+        std::cerr << "error: invalid or no toolset provided!" << std::endl;
     }
 }
 

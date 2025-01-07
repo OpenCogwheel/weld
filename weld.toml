@@ -1,0 +1,12 @@
+# To be used if weld already exists on your device
+
+[project]
+name = "weld"
+
+[settings]
+toolset = "g++"
+src_dir = "src"
+out_dir = "bin"
+
+[gnuc]
+cflags = ["-O3"]
