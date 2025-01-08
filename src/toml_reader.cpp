@@ -13,8 +13,8 @@ TOMLReader::TOMLReader(std::filesystem::path path) {
         m_Data.project_name = toml::find<std::string>(project_settings, "name");
         m_Data.project_type = toml::find<std::string>(project_settings, "type");
     } else if (weld_build_data.contains("workspace")) {
-        std::cerr << "error: workspace isnt implemented yet" << std::endl;
-        exit(1);
+        auto workspace_settings = toml::find(weld_build_data, "workspace");
+        m_Data.is_workspace = true;
     } else {
         std::cerr << "error: no project or workspace found" << std::endl;
         exit(1);

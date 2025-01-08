@@ -4,7 +4,7 @@ type = "ConsoleApp"
 
 [files]
 cextensions = [".cpp"]
-exclude = ["main2.cpp"]
+exclude = ["test/"]
 
 [settings]
 toolset = "g++"

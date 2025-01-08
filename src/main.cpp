@@ -1,7 +1,5 @@
 #include <iostream>
 #include <string>
-#include <unordered_map>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 #include <boost/process.hpp>
@@ -21,7 +19,7 @@
 std::vector<std::filesystem::path> get_args_with_extensions(const std::filesystem::path& dir, const std::vector<std::string>& extensions) {
     std::vector<std::filesystem::path> result;
 
-    for (const auto& entry : std::filesystem::directory_iterator(dir)) {
+    for (const auto& entry : std::filesystem::recursive_directory_iterator(dir)) {
         if (std::filesystem::is_regular_file(entry)) {
             std::string ext = entry.path().extension().string();
 
@@ -32,6 +30,48 @@ std::vector<std::filesystem::path> get_args_with_extensions(const std::filesyste
     }
 
     return result;
+}
+
+void exclude_files_and_folders(
+    const std::filesystem::path &root_dir, 
+    std::vector<std::filesystem::path> &files, 
+    const std::vector<std::string> &exclude
+) {
+    std::filesystem::path root_path(root_dir);
+    
+    for (auto it = files.begin(); it != files.end(); ) {
+        bool should_exclude = false;
+        
+        for (const auto &excluded : exclude) {
+            std::filesystem::path excluded_path = root_path / excluded;
+            
+            if (excluded_path.has_filename() == false) {
+                excluded_path = excluded_path.parent_path();
+            }
+            
+            excluded_path = excluded_path.lexically_normal();
+            
+            std::filesystem::path current_path = *it;
+            
+            current_path = current_path.lexically_normal(); 
+            
+            if (current_path == excluded_path) {
+                should_exclude = true;
+                break;
+            }
+            
+            if (current_path.string().find(excluded_path.string() + std::filesystem::path::preferred_separator) == 0) {
+                should_exclude = true;
+                break;
+            }
+        }
+        
+        if (should_exclude) {
+            it = files.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 std::string find_exec_path(std::string name) {
@@ -83,13 +123,7 @@ void build_project_gcc(TOMLData data) {
     
     std::string gpp_path = find_exec_path("gcc");
     
-    for (auto it = files.begin(); it != files.end(); ) {
-        if (std::find(data.exclude.begin(), data.exclude.end(), it->filename()) != data.exclude.end()) {
-            it = files.erase(it);
-        } else {
-            ++it;
-        }
-    }
+    exclude_files_and_folders(full_src_path, files, data.exclude);
 
     std::string out_name = data.project_name;
     #ifdef __linux__
@@ -170,13 +204,7 @@ void build_project_gpp(TOMLData data) {
     
     std::string gpp_path = find_exec_path("g++");
     
-    for (auto it = files.begin(); it != files.end(); ) {
-        if (std::find(data.exclude.begin(), data.exclude.end(), it->filename()) != data.exclude.end()) {
-            it = files.erase(it);
-        } else {
-            ++it;
-        }
-    }
+    exclude_files_and_folders(full_src_path, files, data.exclude);
 
     std::string out_name = data.project_name;
     #ifdef __linux__
