@@ -1,8 +1,11 @@
+#include <cstdlib>
 #include <iostream>
 #include <string>
 #include <vector>
 #include <algorithm>
 #include <filesystem>
+#include <cassert>
+#include <fstream>
 
 #include "toml_reader.hpp"
 #include "command.hpp"
@@ -174,14 +177,123 @@ void build_project_gnuc(TOMLData data) {
     #endif
 }
 
-int main(int argc, char **argv) {
-    TOMLReader toml_reader(std::filesystem::current_path());
+void create_project(std::string toolset, std::string project_name) {
+    std::filesystem::create_directory(std::filesystem::current_path() / project_name);
+    std::filesystem::create_directory(std::filesystem::current_path() / project_name / "src");
     
-    if (toml_reader.get_data().toolset == "gcc" || toml_reader.get_data().toolset == "g++") {
-        TOMLData data = toml_reader.get_data();
-        build_project_gnuc(data);
+    std::ofstream file(project_name + "/weld.toml");
+    
+    if (file.is_open()) {
+        file << "[project]\n";
+        file << "name = \"" << project_name << "\"\n";
+        file << "type = \"ConsoleApp\"\n\n";
+        
+        file << "[files]\n";
+        if (toolset == "gcc") {
+            file << "cextensions = [\".c\"]\n\n";
+        } else if (toolset == "g++") {
+            file << "cextensions = [\".cpp\"]\n\n";
+        }
+        
+        file << "[settings]\n";
+        file << "toolset = \"" << toolset << "\"\n";
+        file << "src_dir = \"src\"\n";
+        file << "out_dir = \"bin\"\n\n";
+        
+        file << "[gnuc]\n";
+        file << "cflags = [\"\"]\n";
+        file << "lflags = [\"\"]\n";
     } else {
-        std::cerr << "error: invalid toolset" << std::endl;
+        std::cerr << "error: failed to write weld.toml!";
         exit(1);
     }
+    
+    file.close();
+    
+    if (toolset == "gcc") {
+        std::ofstream lfile(std::filesystem::current_path() / project_name / "src/main.c");
+        
+        if (lfile.is_open()) {
+            std::filesystem::path current_file = __FILE__;
+            std::ifstream ctemp(current_file.parent_path() / "templates" / "ctemp");
+            
+            lfile << ctemp.rdbuf();
+            
+            ctemp.close();
+        } else {
+            std::cerr << "error: failed to write main.c!";
+            exit(1);
+        }
+        
+        lfile.close();
+    } else if (toolset == "g++") {
+        if (toolset == "g++") {
+            std::ofstream lfile(std::filesystem::current_path() / project_name / "src/main.cpp");
+            
+            if (lfile.is_open()) {
+                std::filesystem::path current_file = __FILE__;
+                std::ifstream ctemp(current_file.parent_path() / "templates" / "cpptemp");
+                
+                lfile << ctemp.rdbuf();
+                
+                ctemp.close();
+            } else {
+                std::cerr << "error: failed to write main.cpp!";
+                exit(1);
+            }
+            
+            lfile.close();
+        }
+    }
+}
+
+char *shift(int &argc, char ***argv) {
+    assert(argc > 0 && "argc <= 0");
+    --argc;
+    return *(*argv)++;
+}
+
+int main(int argc, char **argv) {
+    char *program = shift(argc, &argv);
+    
+    if (argc < 1) {
+        TOMLReader toml_reader(std::filesystem::current_path());
+        
+        if (toml_reader.get_data().toolset == "gcc" || toml_reader.get_data().toolset == "g++") {
+            TOMLData data = toml_reader.get_data();
+            build_project_gnuc(data);
+        } else {
+            std::cerr << "error: invalid toolset" << std::endl;
+            exit(1);
+        }
+    } else {
+        if (argc < 1) {
+            std::cerr << "error: missing subcommand!" << std::endl;
+        }
+        
+        char *subcommand = shift(argc, &argv);
+        
+        if (std::string(subcommand) == "new") {
+            std::string toolset = "gcc";
+            
+            if (argc < 1) {
+                std::cerr << "error: missing toolset!" << std::endl;
+            }
+            
+            char *project_name = shift(argc, &argv);
+            
+            while (argc > 0) {
+                char *flag = shift(argc, &argv);
+                
+                if (std::string(flag) == "--toolset") {
+                    toolset = shift(argc, &argv);
+                } else {
+                    std::cerr << "error: invalid flag `" << flag << "`" << std::endl;
+                }
+            }
+            
+            create_project(toolset, project_name);
+        }
+    }
+    
 }
