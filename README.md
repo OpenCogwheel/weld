@@ -6,6 +6,7 @@ A cargo inspired toml build system for c and c++
 - [x] project type (DynamicLib, StaticLib, ...)
 - [ ] custom file extensions
 - [ ] progress bar, and more info
+- [ ] proper error system
 - [ ] workspace system
 - [ ] dependency system
 - [ ] Build only changed files
