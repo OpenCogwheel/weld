@@ -1,19 +1,11 @@
 #include <iostream>
 #include <string>
-#include <utility>
 #include <vector>
-#include <boost/process.hpp>
-#include <boost/process/v1/args.hpp>
-#include <boost/process/v1/detail/child_decl.hpp>
-#include <boost/process/v1/exe.hpp>
-#include <boost/process/v1/system.hpp>
-#include <cstdio>
-#include <cstdlib>
-#include <iostream>
+#include <algorithm>
 #include <filesystem>
-#include <vector>
 
 #include "toml_reader.hpp"
+#include "command.hpp"
 #include "threadpool.hpp"
 
 std::vector<std::filesystem::path> get_args_with_extensions(const std::filesystem::path& dir, const std::vector<std::string>& extensions) {
@@ -106,7 +98,7 @@ void exclude_files_and_folders(
     }
 }
 
-void build_project_gcc(TOMLData data) {
+void build_project_gnuc(TOMLData data) {
     std::string full_src_path = std::filesystem::current_path().string() + "/" + data.src_dir;
     std::string full_out_path = std::filesystem::current_path().string() + "/" + data.out_dir;
     
@@ -114,14 +106,13 @@ void build_project_gcc(TOMLData data) {
         = get_args_with_extensions(full_src_path, data.cextensions);
     
     ThreadPool pool(std::thread::hardware_concurrency());
-    std::vector<boost::process::child> processes;
-    std::mutex child_mutex;
+    std::vector<std::future<void>> futures;
     
     // Create the required output directory
     std::filesystem::create_directory(full_out_path);
     std::filesystem::create_directory(full_out_path + "/genobjs");
     
-    std::string gpp_path = find_exec_path("gcc");
+    std::string gnuc_path = find_exec_path(data.toolset);
     
     exclude_files_and_folders(full_src_path, files, data.exclude);
 
@@ -142,141 +133,53 @@ void build_project_gcc(TOMLData data) {
         }
         
         for (auto &file : files) {
-            pool.enqueue([&] {
-                boost::process::child process(
-                    gpp_path,
-                    boost::process::args(data.cflags),
-                    boost::process::args({
-                        "-c", file,
-                        "-o", full_out_path + "/genobjs/" + file.replace_extension(".o").filename().string()
-                    })
+            std::filesystem::path out_file = file; out_file.replace_extension(".o");
+            std::cout << "Building ---> " + file.string() + "\n";
+            pool.enqueue([=]() {
+                Commands::run(
+                    gnuc_path,
+                    data.cflags,
+                    "-c", file,
+                    "-o", full_out_path + "/genobjs/" + out_file.filename().string()
                 );
-                {
-                    std::lock_guard<std::mutex> lock(child_mutex);
-                    processes.push_back(std::move(process));
-                }
+                
+                std::cout << "Finished ---> " << out_file.string() << std::endl;
             });
         }
         
-        pool.enqueue([&] {
-            std::lock_guard<std::mutex> lock(child_mutex);
-            for (auto& process : processes) {
-                process.wait();
-            }
-        });
+        pool.get();
         
         for (auto file : files) {
             file = std::filesystem::path(full_out_path + "/genobjs/").concat(file.filename().string());
         }
         
+        std::cout << "Linking ---> " << data.project_name << std::endl;
         if (data.project_type == "StaticLib") {
-            boost::process::system(
+            Commands::run(
                 find_exec_path("ar"),
                 "rcs",
-                boost::process::args({full_out_path + "/" + out_name + ".a"}),
-                boost::process::args(files)
+                full_out_path + "/" + out_name + ".a",
+                files
             );
         } else {
-            boost::process::system(
-                gpp_path,
-                boost::process::args(data.lflags),
-                boost::process::args(files),
-                boost::process::args({"-o", full_out_path + "/" + out_name})
+            Commands::run(
+                gnuc_path,
+                data.lflags,
+                files,
+                "-o", full_out_path + "/" + out_name
             );
         }
-    #endif
-}
-
-void build_project_gpp(TOMLData data) {
-    std::string full_src_path = std::filesystem::current_path().string() + "/" + data.src_dir;
-    std::string full_out_path = std::filesystem::current_path().string() + "/" + data.out_dir;
-    
-    std::vector<std::filesystem::path> files 
-        = get_args_with_extensions(full_src_path, data.cextensions);
-    
-    ThreadPool pool(std::thread::hardware_concurrency());
-    std::vector<boost::process::child> processes;
-    std::mutex child_mutex;
-    
-    // Create the required output directory
-    std::filesystem::create_directory(full_out_path);
-    std::filesystem::create_directory(full_out_path + "/genobjs");
-    
-    std::string gpp_path = find_exec_path("g++");
-    
-    exclude_files_and_folders(full_src_path, files, data.exclude);
-
-    std::string out_name = data.project_name;
-    #ifdef __linux__
-        if (data.project_type == "SharedLib") {
-            data.cflags.push_back("-fPIC");
-            data.lflags.push_back("-fPIC");
-            data.lflags.push_back("-shared");
-            data.project_name += ".so";
-        } else if (data.project_type == "StaticLib") {
-            data.project_name += ".a";
-        } else {
-            if (data.project_type != "ConsoleApp") {
-                std::cerr << "error: invalid project type!" << std::endl;
-                exit(1);
-            }
-        }
         
-        for (auto &file : files) {
-            pool.enqueue([&] {
-                boost::process::child process(
-                    gpp_path,
-                    boost::process::args(data.cflags),
-                    boost::process::args({
-                        "-c", file,
-                        "-o", full_out_path + "/genobjs/" + file.replace_extension(".o").filename().string()
-                    })
-                );
-                {
-                    std::lock_guard<std::mutex> lock(child_mutex);
-                    processes.push_back(std::move(process));
-                }
-            });
-        }
-        
-        pool.enqueue([&] {
-            std::lock_guard<std::mutex> lock(child_mutex);
-            for (auto& process : processes) {
-                process.wait();
-            }
-        });
-        
-        for (auto file : files) {
-            file = std::filesystem::path(full_out_path + "/genobjs/").concat(file.filename().string());
-        }
-        
-        if (data.project_type == "StaticLib") {
-            boost::process::system(
-                find_exec_path("ar"),
-                "rcs",
-                boost::process::args({full_out_path + "/" + out_name + ".a"}),
-                boost::process::args(files)
-            );
-        } else {
-            boost::process::system(
-                gpp_path,
-                boost::process::args(data.lflags),
-                boost::process::args(files),
-                boost::process::args({"-o", full_out_path + "/" + out_name})
-            );
-        }
+        std::cout << "Finished Linking" << std::endl;
     #endif
 }
 
 int main(int argc, char **argv) {
     TOMLReader toml_reader(std::filesystem::current_path());
     
-    if (toml_reader.get_data().toolset == "gcc") {
+    if (toml_reader.get_data().toolset == "gcc" || toml_reader.get_data().toolset == "g++") {
         TOMLData data = toml_reader.get_data();
-        build_project_gcc(data);
-    } else if (toml_reader.get_data().toolset == "g++") {
-        TOMLData data = toml_reader.get_data();
-        build_project_gpp(data);
+        build_project_gnuc(data);
     } else {
         std::cerr << "error: invalid toolset" << std::endl;
         exit(1);

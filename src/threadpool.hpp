@@ -1,55 +1,91 @@
-#include <boost/process.hpp>
 #include <vector>
-#include <thread>
-#include <mutex>
+#include <future>
 #include <queue>
+#include <functional>
+#include <mutex>
 #include <condition_variable>
 #include <atomic>
-#include <functional>
 
 class ThreadPool {
 public:
-    explicit ThreadPool(size_t threads) : stop(false) {
-        for (size_t i = 0; i < threads; ++i) {
-            workers.emplace_back([this] {
+    ThreadPool(size_t num_threads) : m_ActiveThreads(0) {
+        for (size_t i = 0; i < num_threads; ++i) {
+            m_Workers.emplace_back([this]() {
                 while (true) {
                     std::function<void()> task;
                     {
-                        std::unique_lock<std::mutex> lock(queue_mutex);
-                        condition.wait(lock, [this] { return stop || !tasks.empty(); });
-                        if (stop && tasks.empty()) return;
-                        task = std::move(tasks.front());
-                        tasks.pop();
+                        std::unique_lock<std::mutex> lock(m_QueueMutex);
+                        m_Condition.wait(lock, [this]() { return !m_Tasks.empty() || m_Stop; });
+
+                        if (m_Stop && m_Tasks.empty()) return;
+
+                        task = std::move(m_Tasks.front());
+                        m_Tasks.pop();
                     }
+                    
+                    {
+                        std::lock_guard<std::mutex> lock(m_ActiveThreadsMutex);
+                        ++m_ActiveThreads;
+                    }
+                    
                     task();
+                    
+                    {
+                        std::lock_guard<std::mutex> lock(m_ActiveThreadsMutex);
+                        --m_ActiveThreads;
+                    }
+
+                    m_Condition.notify_all();
                 }
             });
         }
     }
-
-    template<class F>
-    void enqueue(F&& f) {
-        {
-            std::lock_guard<std::mutex> lock(queue_mutex);
-            tasks.emplace(std::forward<F>(f));
-        }
-        condition.notify_one();
-    }
-
     ~ThreadPool() {
         {
-            std::lock_guard<std::mutex> lock(queue_mutex);
-            stop = true;
+            std::lock_guard<std::mutex> lock(m_QueueMutex);
+            m_Stop = true;
         }
-        condition.notify_all();
-        for (std::thread& worker : workers) {
+        
+        m_Condition.notify_all();
+        
+        for (std::thread& worker : m_Workers) {
             worker.join();
         }
     }
+
+    template <class F, class... Args>
+    std::future<void> enqueue(F&& f, Args&&... args) {
+        auto task = std::make_shared<std::packaged_task<void()>>(
+            std::bind(std::forward<F>(f), std::forward<Args>(args)...)
+        );
+        
+        std::future<void> res = task->get_future();
+        
+        {
+            std::lock_guard<std::mutex> lock(m_QueueMutex);
+            m_Tasks.push([task]() {
+                (*task)();
+            });
+        }
+        
+        m_Condition.notify_one();
+
+        return res;
+    }
+
+    void get() {
+        std::unique_lock<std::mutex> lock(m_QueueMutex);
+        m_Condition.wait(lock, [this]() {
+            return m_Tasks.empty() && m_ActiveThreads == 0;
+        });
+    }
 private:
-    std::vector<std::thread> workers;
-    std::queue<std::function<void()>> tasks;
-    std::mutex queue_mutex;
-    std::condition_variable condition;
-    std::atomic<bool> stop;
+    std::vector<std::thread> m_Workers;
+    std::queue<std::function<void()>> m_Tasks;
+    std::mutex m_QueueMutex;
+    std::condition_variable m_Condition;
+    bool m_Stop = false;
+
+    std::atomic<int> m_ActiveThreads;
+    std::mutex m_ActiveThreadsMutex;
 };
