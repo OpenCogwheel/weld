@@ -4,6 +4,9 @@
 name = "weld"
 type = "ConsoleApp"
 
+[files]
+cextensions = [".cpp"]
+
 [settings]
 toolset = "g++"
 src_dir = "src"

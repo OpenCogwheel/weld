@@ -1,10 +1,12 @@
 [project]
 name = "foo"
-type = "StaticLib"
+type = "ConsoleApp"
+
+[files]
+cextensions = [".cc"]
+exclude = ["main2.cpp"]
 
 [settings]
-static_runtime = true
-
 toolset = "g++"
 
 src_dir = "src"

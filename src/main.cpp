@@ -7,21 +7,53 @@
 #include <cstdlib>
 #include <iostream>
 #include <filesystem>
+#include <set>
 #include <vector>
 
 #include "toml.hpp"
 #include "threadpool.hpp"
 
-std::vector<std::filesystem::path> get_args_with_extension(const std::filesystem::path& dir, const std::string& extension) {
+std::vector<std::filesystem::path> get_args_with_extensions(const std::filesystem::path& dir, const std::vector<std::string>& extensions) {
     std::vector<std::filesystem::path> result;
 
     for (const auto& entry : std::filesystem::directory_iterator(dir)) {
-        if (std::filesystem::is_regular_file(entry) && entry.path().extension() == extension) {
-            result.push_back(entry.path());
+        if (std::filesystem::is_regular_file(entry)) {
+            std::string ext = entry.path().extension().string();
+
+            if (std::find(extensions.begin(), extensions.end(), ext) != extensions.end()) {
+                result.push_back(entry.path());
+            }
         }
     }
 
     return result;
+}
+
+// TODO: windows support
+std::string find_exec_path(std::string name) {
+    std::string path;
+    try {
+        const char* path_env = std::getenv("PATH");
+        if (!path_env) {
+            throw std::runtime_error("PATH environment variable is not set");
+        }
+
+        std::string path_list = path_env;
+        size_t pos = 0;
+        while ((pos = path_list.find(":")) != std::string::npos) {
+            std::string dir = path_list.substr(0, pos);
+            path_list.erase(0, pos + 1);
+            std::string exec_path = dir + "/" + name;
+            if (std::filesystem::exists(exec_path) && std::filesystem::is_regular_file(exec_path)) {
+                return exec_path;
+            }
+        }
+
+    } catch (const std::exception& e) {
+        std::cerr << "Error: failed to find executable " + name + " in path: " << e.what() << std::endl;
+    }
+
+    return "";
 }
 
 void build_project_gcc(
@@ -29,6 +61,8 @@ void build_project_gcc(
     std::string out_dir,
     std::string proj_name,
     std::string proj_type,
+    std::vector<std::string> cextensions,
+    std::vector<std::string> exclude,
     std::vector<std::string> cflags,
     std::vector<std::string> lflags
 ) {
@@ -38,7 +72,7 @@ void build_project_gcc(
     std::filesystem::create_directory(outd);
     std::filesystem::create_directory(outd + "/int");
     
-    std::vector<std::filesystem::path> files = get_args_with_extension(srcd, ".c");
+    std::vector<std::filesystem::path> files = get_args_with_extensions(srcd, cextensions);
     
     const size_t max_threads = std::thread::hardware_concurrency();
     ThreadPool pool(max_threads);
@@ -46,40 +80,47 @@ void build_project_gcc(
     std::vector<boost::process::child> processes;
     std::mutex child_mutex;
     #ifdef __linux__
+        std::string gcc_path = find_exec_path("gcc");
         if (proj_type == "ConsoleApp" || proj_type == "StaticLib") {
             for (auto &file : files) {
-                pool.enqueue([&] {
-                    boost::process::child process(
-                        "/usr/bin/gcc",
-                        boost::process::args(cflags),
-                        boost::process::args({
-                            "-c", file,
-                            "-o", outd + "/int/" + file.replace_extension(".o").filename().string()
-                        })
-                    );
-                    {
-                        std::lock_guard<std::mutex> lock(child_mutex);
-                        processes.push_back(std::move(process));
-                    }
-                });
+                if (std::find(exclude.begin(), exclude.end(), file.filename().string()) == exclude.end()
+                    && std::find(cextensions.begin(), cextensions.end(), file.extension().string()) != exclude.end()) {
+                    pool.enqueue([&] {
+                        boost::process::child process(
+                            gcc_path,
+                            boost::process::args(cflags),
+                            boost::process::args({
+                                "-c", file,
+                                "-o", outd + "/int/" + file.replace_extension(".o").filename().string()
+                            })
+                        );
+                        {
+                            std::lock_guard<std::mutex> lock(child_mutex);
+                            processes.push_back(std::move(process));
+                        }
+                    });
+                }
             }
         } else if (proj_type == "SharedLib") {
             for (auto &file : files) {
-                pool.enqueue([&] {
-                    boost::process::child process(
-                        "/usr/bin/gcc",
-                        "-fPIC",
-                        boost::process::args(cflags),
-                        boost::process::args({
-                            "-c", file,
-                            "-o", outd + "/int/" + file.replace_extension(".o").filename().string()
-                        })
-                    );
-                    {
-                        std::lock_guard<std::mutex> lock(child_mutex);
-                        processes.push_back(std::move(process));
-                    }
-                });
+                if (std::find(exclude.begin(), exclude.end(), file.filename().string()) == exclude.end()
+                    && std::find(cextensions.begin(), cextensions.end(), file.extension().string()) != exclude.end()) {
+                    pool.enqueue([&] {
+                        boost::process::child process(
+                            gcc_path,
+                            "-fPIC",
+                            boost::process::args(cflags),
+                            boost::process::args({
+                                "-c", file,
+                                "-o", outd + "/int/" + file.replace_extension(".o").filename().string()
+                            })
+                        );
+                        {
+                            std::lock_guard<std::mutex> lock(child_mutex);
+                            processes.push_back(std::move(process));
+                        }
+                    });
+                }
             }
         } else {
             std::cerr << "error: invalid project type!" << std::endl;
@@ -98,14 +139,14 @@ void build_project_gcc(
         
         if (proj_type == "ConsoleApp") {
             boost::process::system(
-                "/usr/bin/gcc",
+                gcc_path,
                 boost::process::args(lflags),
                 boost::process::args(files),
                 boost::process::args({"-o", outd + "/" + proj_name})
             );
         } else if (proj_type == "SharedLib") {
             boost::process::system(
-                "/usr/bin/gcc",
+                gcc_path,
                 "-fPIC",
                 "-shared",
                 boost::process::args(lflags),
@@ -114,7 +155,7 @@ void build_project_gcc(
             );
         } else if (proj_type == "StaticLib") {
             boost::process::system(
-                "/usr/bin/ar",
+                find_exec_path("ar"),
                 "rcs",
                 boost::process::args({outd + "/" + proj_name + ".a"}),
                 boost::process::args(files)
@@ -129,6 +170,8 @@ void build_project_gpp(
     std::string out_dir,
     std::string proj_name,
     std::string proj_type,
+    std::vector<std::string> cextensions,
+    std::vector<std::string> exclude,
     std::vector<std::string> cflags,
     std::vector<std::string> lflags
 ) {
@@ -138,7 +181,7 @@ void build_project_gpp(
     std::filesystem::create_directory(outd);
     std::filesystem::create_directory(outd + "/int");
     
-    std::vector<std::filesystem::path> files = get_args_with_extension(srcd, ".cpp");
+    std::vector<std::filesystem::path> files = get_args_with_extensions(srcd, cextensions);
     
     const size_t max_threads = std::thread::hardware_concurrency();
     ThreadPool pool(max_threads);
@@ -146,40 +189,48 @@ void build_project_gpp(
     std::vector<boost::process::child> processes;
     std::mutex child_mutex;
     #ifdef __linux__
+        std::string gpp_path = find_exec_path("g++");
+        
         if (proj_type == "ConsoleApp" || proj_type == "StaticLib") {
             for (auto &file : files) {
-                pool.enqueue([&] {
-                    boost::process::child process(
-                        "/usr/bin/g++",
-                        boost::process::args(cflags),
-                        boost::process::args({
-                            "-c", file,
-                            "-o", outd + "/int/" + file.replace_extension(".o").filename().string()
-                        })
-                    );
-                    {
-                        std::lock_guard<std::mutex> lock(child_mutex);
-                        processes.push_back(std::move(process));
-                    }
-                });
+                if (std::find(exclude.begin(), exclude.end(), file.filename().string()) == exclude.end()
+                    && std::find(cextensions.begin(), cextensions.end(), file.extension().string()) != exclude.end()) {
+                    pool.enqueue([&] {
+                        boost::process::child process(
+                            gpp_path,
+                            boost::process::args(cflags),
+                            boost::process::args({
+                                "-c", file,
+                                "-o", outd + "/int/" + file.replace_extension(".o").filename().string()
+                            })
+                        );
+                        {
+                            std::lock_guard<std::mutex> lock(child_mutex);
+                            processes.push_back(std::move(process));
+                        }
+                    });
+                }
             }
         } else if (proj_type == "SharedLib") {
             for (auto &file : files) {
-                pool.enqueue([&] {
-                    boost::process::child process(
-                        "/usr/bin/g++",
-                        "-fPIC",
-                        boost::process::args(cflags),
-                        boost::process::args({
-                            "-c", file,
-                            "-o", outd + "/int/" + file.replace_extension(".o").filename().string()
-                        })
-                    );
-                    {
-                        std::lock_guard<std::mutex> lock(child_mutex);
-                        processes.push_back(std::move(process));
-                    }
-                });
+                if (std::find(exclude.begin(), exclude.end(), file.filename().string()) == exclude.end()
+                    && std::find(cextensions.begin(), cextensions.end(), file.extension().string()) != exclude.end()) {
+                    pool.enqueue([&] {
+                        boost::process::child process(
+                            gpp_path,
+                            "-fPIC",
+                            boost::process::args(cflags),
+                            boost::process::args({
+                                "-c", file,
+                                "-o", outd + "/int/" + file.replace_extension(".o").filename().string()
+                            })
+                        );
+                        {
+                            std::lock_guard<std::mutex> lock(child_mutex);
+                            processes.push_back(std::move(process));
+                        }
+                    });
+                }
             }
         } else {
             std::cerr << "error: invalid project type!" << std::endl;
@@ -198,14 +249,14 @@ void build_project_gpp(
         
         if (proj_type == "ConsoleApp") {
             boost::process::system(
-                "/usr/bin/g++",
+                gpp_path,
                 boost::process::args(lflags),
                 boost::process::args(files),
                 boost::process::args({"-o", outd + "/" + proj_name})
             );
         } else if (proj_type == "SharedLib") {
             boost::process::system(
-                "/usr/bin/g++",
+                gpp_path,
                 "-fPIC",
                 "-shared",
                 boost::process::args(lflags),
@@ -214,7 +265,7 @@ void build_project_gpp(
             );
         } else if (proj_type == "StaticLib") {
             boost::process::system(
-                "/usr/bin/ar",
+                find_exec_path("ar"),
                 "rcs",
                 boost::process::args({outd + "/" + proj_name + ".a"}),
                 boost::process::args(files)
@@ -232,6 +283,9 @@ void build_project(std::string path) {
     std::string src_dir;
     std::string out_dir;
     
+    std::vector<std::string> exclude;
+    std::vector<std::string> cextensions;
+    
     std::string toolset;
     std::vector<std::string> cflags;
     std::vector<std::string> lflags;
@@ -241,6 +295,24 @@ void build_project(std::string path) {
         project_type = toml::find<std::string>(project_data, "type");
         
         std::cout << "found project: " << project_name << std::endl;
+    }
+    
+    if (weld_build_data.contains("files")) {
+        auto files_data = toml::find(weld_build_data, "files");
+        
+        if (files_data.contains("cextensions")) {
+            cextensions = toml::find<std::vector<std::string>>(files_data, "cextensions");
+        } else {
+            cextensions.push_back(".cpp");
+            cextensions.push_back(".c");
+        }
+        
+        if (files_data.contains("exclude")) {
+            exclude = toml::find<std::vector<std::string>>(files_data, "exclude");
+        }
+    } else {
+        cextensions.push_back(".cpp");
+        cextensions.push_back(".c");
     }
     
     if (weld_build_data.contains("settings")) {
@@ -276,12 +348,14 @@ void build_project(std::string path) {
             build_project_gcc(
                 src_dir, out_dir,
                 project_name, project_type,
+                cextensions, exclude,
                 cflags, lflags
             );
         } else if (toolset == "g++") {
             build_project_gpp(
                 src_dir, out_dir,
                 project_name, project_type,
+                cextensions, exclude,
                 cflags, lflags
             );
         }
