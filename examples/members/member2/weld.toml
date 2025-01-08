@@ -1,0 +1,15 @@
+[project]
+name = "foo"
+type = "ConsoleApp"
+
+[settings]
+toolset = "g++"
+src_dir = "src"
+out_dir = "out"
+
+[gnuc]
+#cflags = ["-O2"]
+#lflags = [""]
+
+[dependencies]
+member1 = { path = "../member1" }

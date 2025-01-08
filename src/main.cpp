@@ -1,5 +1,6 @@
 #include <boost/process.hpp>
 #include <boost/process/v1/args.hpp>
+#include <boost/process/v1/detail/child_decl.hpp>
 #include <boost/process/v1/exe.hpp>
 #include <boost/process/v1/system.hpp>
 #include <cstdio>
@@ -9,6 +10,7 @@
 #include <vector>
 
 #include "toml.hpp"
+#include "threadpool.hpp"
 
 std::vector<std::filesystem::path> get_args_with_extension(const std::filesystem::path& dir, const std::string& extension) {
     std::vector<std::filesystem::path> result;
@@ -36,17 +38,36 @@ void build_project_gcc(
     std::filesystem::create_directory(outd + "/int");
     
     std::vector<std::filesystem::path> files = get_args_with_extension(srcd, ".c");
+    
+    const size_t max_threads = std::thread::hardware_concurrency();
+    ThreadPool pool(max_threads);
+    
+    std::vector<boost::process::child> processes;
+    std::mutex child_mutex;
     #ifdef __linux__
-        for (auto file : files) {
-            boost::process::system(
-                "/usr/bin/gcc",
-                boost::process::args(cflags),
-                boost::process::args({
-                    "-c", file,
-                    "-o", outd + "/int/" + file.replace_extension(".o").filename().string()
-                })
-            );
+        for (auto &file : files) {
+            pool.enqueue([&] {
+                boost::process::child process(
+                    "/usr/bin/gcc",
+                    boost::process::args(cflags),
+                    boost::process::args({
+                        "-c", file,
+                        "-o", outd + "/int/" + file.replace_extension(".o").filename().string()
+                    })
+                );
+                {
+                    std::lock_guard<std::mutex> lock(child_mutex);
+                    processes.push_back(std::move(process));
+                }
+            });
         }
+        
+        pool.enqueue([&] {
+            std::lock_guard<std::mutex> lock(child_mutex);
+            for (auto& process : processes) {
+                process.wait();
+            }
+        });
         
         for (auto file : files) {
             file = std::filesystem::path(outd + "/int/").concat(file.replace_extension(".o").filename().string());
@@ -76,17 +97,36 @@ void build_project_gpp(
     std::filesystem::create_directory(outd + "/int");
     
     std::vector<std::filesystem::path> files = get_args_with_extension(srcd, ".cpp");
+    
+    const size_t max_threads = std::thread::hardware_concurrency();
+    ThreadPool pool(max_threads);
+    
+    std::vector<boost::process::child> processes;
+    std::mutex child_mutex;
     #ifdef __linux__
-        for (auto file : files) {
-            boost::process::system(
-                "/usr/bin/g++",
-                boost::process::args(cflags),
-                boost::process::args({
-                    "-c", file,
-                    "-o", outd + "/int/" + file.replace_extension(".o").filename().string()
-                })
-            );
+        for (auto &file : files) {
+            pool.enqueue([&] {
+                boost::process::child process(
+                    "/usr/bin/g++",
+                    boost::process::args(cflags),
+                    boost::process::args({
+                        "-c", file,
+                        "-o", outd + "/int/" + file.replace_extension(".o").filename().string()
+                    })
+                );
+                {
+                    std::lock_guard<std::mutex> lock(child_mutex);
+                    processes.push_back(std::move(process));
+                }
+            });
         }
+        
+        pool.enqueue([&] {
+            std::lock_guard<std::mutex> lock(child_mutex);
+            for (auto& process : processes) {
+                process.wait();
+            }
+        });
         
         for (auto file : files) {
             file = std::filesystem::path(outd + "/int/").concat(file.replace_extension(".o").filename().string());
@@ -168,13 +208,11 @@ static char *shift(int &argc, char ***argv) {
 int main(int argc, char **argv) {
     char *program = shift(argc, &argv);
     
-    if (argc < 1) {
-        build_project(std::filesystem::current_path().string());
-    } else {
-        while (argc > 0) {
-            char *flag = shift(argc, &argv);
-            
-            // TODO: Implement flags
-        }
+    while (argc > 0) {
+        char *flag = shift(argc, &argv);
+        
+        // TODO: Implement flags
     }
+    
+    build_project(std::filesystem::current_path().string());
 }

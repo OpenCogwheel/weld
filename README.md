@@ -5,4 +5,4 @@ A cargo inspired toml build system for c and c++
 - [ ] project type (DynamicLib, StaticLib, ...)
 - [ ] workspace system
 - [ ] dependency system
-- [ ] multi-threaded build system
+- [x] multi-threaded build system
