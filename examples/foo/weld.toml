@@ -1,11 +1,14 @@
 [project]
 name = "foo"
+type = "StaticLib"
 
 [settings]
+static_runtime = true
+
 toolset = "g++"
+
 src_dir = "src"
 out_dir = "out"
 
 [gnuc]
-#cflags = ["-O2"]
-#lflags = [""]
+cflags = ["-O2"]

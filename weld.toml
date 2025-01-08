@@ -2,6 +2,7 @@
 
 [project]
 name = "weld"
+type = "ConsoleApp"
 
 [settings]
 toolset = "g++"

@@ -28,6 +28,7 @@ void build_project_gcc(
     std::string src_dir,
     std::string out_dir,
     std::string proj_name,
+    std::string proj_type,
     std::vector<std::string> cflags,
     std::vector<std::string> lflags
 ) {
@@ -45,21 +46,43 @@ void build_project_gcc(
     std::vector<boost::process::child> processes;
     std::mutex child_mutex;
     #ifdef __linux__
-        for (auto &file : files) {
-            pool.enqueue([&] {
-                boost::process::child process(
-                    "/usr/bin/gcc",
-                    boost::process::args(cflags),
-                    boost::process::args({
-                        "-c", file,
-                        "-o", outd + "/int/" + file.replace_extension(".o").filename().string()
-                    })
-                );
-                {
-                    std::lock_guard<std::mutex> lock(child_mutex);
-                    processes.push_back(std::move(process));
-                }
-            });
+        if (proj_type == "ConsoleApp" || proj_type == "StaticLib") {
+            for (auto &file : files) {
+                pool.enqueue([&] {
+                    boost::process::child process(
+                        "/usr/bin/gcc",
+                        boost::process::args(cflags),
+                        boost::process::args({
+                            "-c", file,
+                            "-o", outd + "/int/" + file.replace_extension(".o").filename().string()
+                        })
+                    );
+                    {
+                        std::lock_guard<std::mutex> lock(child_mutex);
+                        processes.push_back(std::move(process));
+                    }
+                });
+            }
+        } else if (proj_type == "SharedLib") {
+            for (auto &file : files) {
+                pool.enqueue([&] {
+                    boost::process::child process(
+                        "/usr/bin/gcc",
+                        "-fPIC",
+                        boost::process::args(cflags),
+                        boost::process::args({
+                            "-c", file,
+                            "-o", outd + "/int/" + file.replace_extension(".o").filename().string()
+                        })
+                    );
+                    {
+                        std::lock_guard<std::mutex> lock(child_mutex);
+                        processes.push_back(std::move(process));
+                    }
+                });
+            }
+        } else {
+            std::cerr << "error: invalid project type!" << std::endl;
         }
         
         pool.enqueue([&] {
@@ -73,12 +96,30 @@ void build_project_gcc(
             file = std::filesystem::path(outd + "/int/").concat(file.replace_extension(".o").filename().string());
         }
         
-        boost::process::system(
-            "/usr/bin/gcc",
-            boost::process::args(lflags),
-            boost::process::args(files),
-            boost::process::args({"-o", outd + "/" + proj_name})
-        );
+        if (proj_type == "ConsoleApp") {
+            boost::process::system(
+                "/usr/bin/gcc",
+                boost::process::args(lflags),
+                boost::process::args(files),
+                boost::process::args({"-o", outd + "/" + proj_name})
+            );
+        } else if (proj_type == "SharedLib") {
+            boost::process::system(
+                "/usr/bin/gcc",
+                "-fPIC",
+                "-shared",
+                boost::process::args(lflags),
+                boost::process::args(files),
+                boost::process::args({"-o", outd + "/" + proj_name + ".so"})
+            );
+        } else if (proj_type == "StaticLib") {
+            boost::process::system(
+                "/usr/bin/ar",
+                "rcs",
+                boost::process::args({outd + "/" + proj_name + ".a"}),
+                boost::process::args(files)
+            );
+        }
     #endif
     
 }
@@ -87,6 +128,7 @@ void build_project_gpp(
     std::string src_dir,
     std::string out_dir,
     std::string proj_name,
+    std::string proj_type,
     std::vector<std::string> cflags,
     std::vector<std::string> lflags
 ) {
@@ -104,21 +146,43 @@ void build_project_gpp(
     std::vector<boost::process::child> processes;
     std::mutex child_mutex;
     #ifdef __linux__
-        for (auto &file : files) {
-            pool.enqueue([&] {
-                boost::process::child process(
-                    "/usr/bin/g++",
-                    boost::process::args(cflags),
-                    boost::process::args({
-                        "-c", file,
-                        "-o", outd + "/int/" + file.replace_extension(".o").filename().string()
-                    })
-                );
-                {
-                    std::lock_guard<std::mutex> lock(child_mutex);
-                    processes.push_back(std::move(process));
-                }
-            });
+        if (proj_type == "ConsoleApp" || proj_type == "StaticLib") {
+            for (auto &file : files) {
+                pool.enqueue([&] {
+                    boost::process::child process(
+                        "/usr/bin/g++",
+                        boost::process::args(cflags),
+                        boost::process::args({
+                            "-c", file,
+                            "-o", outd + "/int/" + file.replace_extension(".o").filename().string()
+                        })
+                    );
+                    {
+                        std::lock_guard<std::mutex> lock(child_mutex);
+                        processes.push_back(std::move(process));
+                    }
+                });
+            }
+        } else if (proj_type == "SharedLib") {
+            for (auto &file : files) {
+                pool.enqueue([&] {
+                    boost::process::child process(
+                        "/usr/bin/g++",
+                        "-fPIC",
+                        boost::process::args(cflags),
+                        boost::process::args({
+                            "-c", file,
+                            "-o", outd + "/int/" + file.replace_extension(".o").filename().string()
+                        })
+                    );
+                    {
+                        std::lock_guard<std::mutex> lock(child_mutex);
+                        processes.push_back(std::move(process));
+                    }
+                });
+            }
+        } else {
+            std::cerr << "error: invalid project type!" << std::endl;
         }
         
         pool.enqueue([&] {
@@ -132,12 +196,30 @@ void build_project_gpp(
             file = std::filesystem::path(outd + "/int/").concat(file.replace_extension(".o").filename().string());
         }
         
-        boost::process::system(
-            "/usr/bin/g++",
-            boost::process::args(lflags),
-            boost::process::args(files),
-            boost::process::args({"-o", outd + "/" + proj_name})
-        );
+        if (proj_type == "ConsoleApp") {
+            boost::process::system(
+                "/usr/bin/g++",
+                boost::process::args(lflags),
+                boost::process::args(files),
+                boost::process::args({"-o", outd + "/" + proj_name})
+            );
+        } else if (proj_type == "SharedLib") {
+            boost::process::system(
+                "/usr/bin/g++",
+                "-fPIC",
+                "-shared",
+                boost::process::args(lflags),
+                boost::process::args(files),
+                boost::process::args({"-o", outd + "/" + proj_name + ".so"})
+            );
+        } else if (proj_type == "StaticLib") {
+            boost::process::system(
+                "/usr/bin/ar",
+                "rcs",
+                boost::process::args({outd + "/" + proj_name + ".a"}),
+                boost::process::args(files)
+            );
+        }
     #endif
     
 }
@@ -146,6 +228,7 @@ void build_project(std::string path) {
     auto weld_build_data = toml::parse(path + "/weld.toml", toml::spec::v(1, 1, 0));
     
     std::string project_name;
+    std::string project_type;
     std::string src_dir;
     std::string out_dir;
     
@@ -155,6 +238,7 @@ void build_project(std::string path) {
     if (weld_build_data.contains("project")) {
         auto project_data = toml::find(weld_build_data, "project");
         project_name = toml::find<std::string>(project_data, "name");
+        project_type = toml::find<std::string>(project_data, "type");
         
         std::cout << "found project: " << project_name << std::endl;
     }
@@ -189,9 +273,17 @@ void build_project(std::string path) {
         }
         
         if (toolset == "gcc") {
-            build_project_gcc(src_dir, out_dir, project_name, cflags, lflags);
+            build_project_gcc(
+                src_dir, out_dir,
+                project_name, project_type,
+                cflags, lflags
+            );
         } else if (toolset == "g++") {
-            build_project_gpp(src_dir, out_dir, project_name, cflags, lflags);
+            build_project_gpp(
+                src_dir, out_dir,
+                project_name, project_type,
+                cflags, lflags
+            );
         }
     } else {
         std::cerr << "error: invalid or no toolset provided!" << std::endl;
