@@ -3,7 +3,7 @@ name = "foo"
 type = "ConsoleApp"
 
 [files]
-cextensions = [".cc"]
+cextensions = [".cpp"]
 exclude = ["main2.cpp"]
 
 [settings]
