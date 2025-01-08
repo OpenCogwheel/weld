@@ -32,6 +32,38 @@ std::vector<std::filesystem::path> get_args_with_extensions(const std::filesyste
     return result;
 }
 
+std::string find_exec_path(std::string name) {
+    std::string path;
+    try {
+        const char* path_env = std::getenv("PATH");
+        if (!path_env) {
+            throw std::runtime_error("PATH environment variable is not set");
+        }
+
+        std::string path_list = path_env;
+        char path_seperator =
+        #if defined(_WIN32) || defined(_WIN64)
+            ';';
+        #else
+            ':';
+        #endif
+        
+        size_t pos = 0;
+        while ((pos = path_list.find(path_seperator)) != std::string::npos) {
+            std::string dir = path_list.substr(0, pos);
+            path_list.erase(0, pos + 1);
+            std::filesystem::path exec_path = std::filesystem::path(dir) / name;
+            if (std::filesystem::exists(exec_path) && std::filesystem::is_regular_file(exec_path)) {
+                return exec_path;
+            }
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "Error: failed to find executable " + name + " in path: " << e.what() << std::endl;
+    }
+
+    return "";
+}
+
 void exclude_files_and_folders(
     const std::filesystem::path &root_dir, 
     std::vector<std::filesystem::path> &files, 
@@ -72,38 +104,6 @@ void exclude_files_and_folders(
             ++it;
         }
     }
-}
-
-std::string find_exec_path(std::string name) {
-    std::string path;
-    try {
-        const char* path_env = std::getenv("PATH");
-        if (!path_env) {
-            throw std::runtime_error("PATH environment variable is not set");
-        }
-
-        std::string path_list = path_env;
-        char path_seperator =
-        #if defined(_WIN32) || defined(_WIN64)
-            ';';
-        #else
-            ':';
-        #endif
-        
-        size_t pos = 0;
-        while ((pos = path_list.find(path_seperator)) != std::string::npos) {
-            std::string dir = path_list.substr(0, pos);
-            path_list.erase(0, pos + 1);
-            std::filesystem::path exec_path = std::filesystem::path(dir) / name;
-            if (std::filesystem::exists(exec_path) && std::filesystem::is_regular_file(exec_path)) {
-                return exec_path;
-            }
-        }
-    } catch (const std::exception& e) {
-        std::cerr << "Error: failed to find executable " + name + " in path: " << e.what() << std::endl;
-    }
-
-    return "";
 }
 
 void build_project_gcc(TOMLData data) {
