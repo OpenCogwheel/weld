@@ -1,6 +1,9 @@
 [project]
-name = "foo"
-type = "DynamicLib"
+name = "member1"
+type = "SharedLib"
+
+[files]
+extensions = [".cpp"]
 
 [settings]
 toolset = "g++"

@@ -1,4 +1,5 @@
 [workspace]
+out_dir = "bin"
 members = [
     "member1", "member2"
 ]

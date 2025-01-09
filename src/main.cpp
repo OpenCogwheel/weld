@@ -1,4 +1,19 @@
+#include "command.hpp"
+#include "toml_reader.hpp"
 #include "weld.hpp"
+
+void build_project(TOMLData data) {
+    if (data.toolset == "gcc" || data.toolset == "g++") {
+        build_project_gnuc(data);
+    } else {
+        std::cerr << "error: invalid toolset in " + data.project_name << std::endl;
+        exit(1);
+    }
+}
+
+void build_workspace(TOMLData data) {
+    build_workspace_gnuc(data);
+}
 
 char *shift(int &argc, char ***argv) {
     assert(argc > 0 && "argc <= 0");
@@ -11,13 +26,11 @@ int main(int argc, char **argv) {
     
     if (argc < 1) {
         TOMLReader toml_reader(std::filesystem::current_path());
-        
-        if (toml_reader.get_data().toolset == "gcc" || toml_reader.get_data().toolset == "g++") {
+        if (toml_reader.get_data().is_workspace == true) {
             TOMLData data = toml_reader.get_data();
-            build_project_gnuc(data);
+            build_workspace(data);
         } else {
-            std::cerr << "error: invalid toolset" << std::endl;
-            exit(1);
+            build_project(toml_reader.get_data());
         }
     } else {
         if (argc < 1) {

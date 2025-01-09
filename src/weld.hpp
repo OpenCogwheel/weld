@@ -24,5 +24,6 @@ void exclude_files_and_folders(
 );
 
 void build_project_gnuc(TOMLData data);
+void build_workspace_gnuc(TOMLData data);
 
 void create_project(std::string toolset, std::string project_name);

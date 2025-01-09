@@ -5,8 +5,11 @@
 #include <vector>
 
 struct TOMLData {
+    // Workspace stuff
     bool is_workspace = false;
+    std::vector<std::string> members;
     
+    // Project stuff
     std::string project_name, project_type, project_path;
     std::string src_dir, out_dir, include_dir;
     std::string toolset;

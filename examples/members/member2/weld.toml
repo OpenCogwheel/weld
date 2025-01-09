@@ -1,6 +1,9 @@
 [project]
-name = "foo"
+name = "member2"
 type = "ConsoleApp"
+
+[files]
+extensions = [".cpp"]
 
 [settings]
 toolset = "g++"
@@ -12,4 +15,4 @@ out_dir = "out"
 #lflags = [""]
 
 [dependencies]
-member1 = { path = "../member1" }
+member1 = { path = "../member1", include = true }

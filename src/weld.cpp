@@ -1,5 +1,6 @@
 #include "weld.hpp"
 #include "command.hpp"
+#include "toml_reader.hpp"
 #include <algorithm>
 #include <filesystem>
 
@@ -169,6 +170,93 @@ void build_project_gnuc(TOMLData data) {
             std::cout << "Finished Linking" << std::endl;
         }
     #endif
+}
+
+void build_workspace_gnuc(TOMLData data) {
+    std::string full_src_path = data.project_path + "/" + data.src_dir;
+    std::string full_out_path = data.project_path + "/" + data.out_dir;
+    
+    std::filesystem::create_directory(full_out_path);
+    
+    ThreadPool pool(std::thread::hardware_concurrency());
+    std::vector<std::future<void>> futures;
+    
+    for (std::string member : data.members) {
+        std::string full_member_path = data.project_path + "/" + member;
+        TOMLReader member_reader(full_member_path);
+        TOMLData member_data = member_reader.get_data();
+        
+        std::string gnuc_path = find_exec_path(member_data.toolset);
+        
+        std::string full_member_src_path = member_data.project_path + "/" + member_data.src_dir;
+        std::string full_member_out_path = data.project_path + "/" + data.out_dir + "/" + member_data.project_name;
+        
+        std::filesystem::create_directory(full_member_out_path);
+        std::filesystem::create_directory(full_member_out_path + "/genobjs");
+        
+        std::vector<std::filesystem::path> files
+            = get_args_with_extensions(full_member_src_path, member_data.cextensions);
+        exclude_files_and_folders(full_member_src_path, files, member_data.exclude);
+        
+        std::string out_name = member_data.project_name;
+        
+        #ifdef __linux__
+            if (member_data.project_type == "SharedLib") {
+                member_data.cflags.push_back("-fPIC");
+                member_data.lflags.push_back("-fPIC");
+                member_data.lflags.push_back("-shared");
+                out_name = "lib" + member_data.project_name + ".so";
+            } else if (member_data.project_type == "StaticLib") {
+                out_name = "lib" + member_data.project_name + ".a";
+            } else {
+                if (member_data.project_type != "ConsoleApp") {
+                    std::cerr << "error: invalid project type!" << std::endl;
+                    exit(1);
+                }
+            }
+            
+            for (auto &file : files) {
+                std::filesystem::path out_file = file.filename(); out_file.replace_extension(".o");
+                std::cout << "Building ---> " + file.filename().string() + "\n";
+                pool.enqueue([=]() {
+                    Commands::run(
+                        gnuc_path,
+                        member_data.cflags,
+                        "-c", file,
+                        "-o", full_member_out_path + "/genobjs/" + out_file.string()
+                    );
+                    
+                    std::cout << "Finished ---> " << out_file.string() << std::endl;
+                });
+            }
+            
+            pool.get();
+            
+            for (auto &file : files) {
+                file = std::filesystem::path(full_member_out_path + "/genobjs/").concat(file.filename().replace_extension(".o").string());
+            }
+            
+            if (member_data.project_type == "StaticLib") {
+                std::cout << "Creating ---> " << out_name << std::endl;
+                Commands::run(
+                    find_exec_path("ar"),
+                    "rcs",
+                    full_member_out_path + "/" + out_name,
+                    files
+                );
+                std::cout << "Finished Creating Static" << std::endl;
+            } else {
+                std::cout << "Linking ---> " << member_data.project_name << std::endl;
+                Commands::run(
+                    gnuc_path,
+                    files,
+                    member_data.lflags,
+                    "-o", full_member_out_path + "/" + out_name
+                );
+                std::cout << "Finished Linking" << std::endl;
+            }
+        #endif
+    }
 }
 
 void create_project(std::string toolset, std::string project_name) {
