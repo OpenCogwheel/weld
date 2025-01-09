@@ -14,3 +14,15 @@ A cargo inspired toml build system for c and c++
 - [x] project install system
     - [ ] Add more customizability
 - [ ] build only changed files
+
+## Install information
+To compile **weld** you need cmake or an already existing weld installation.
+##### cmake (ninja recommended)
+```
+$ cmake -G Ninja -B bin
+$ cmake --build bin
+```
+##### weld (can be done after cmake)
+```
+$ weld install
+```
