@@ -9,6 +9,6 @@ A cargo inspired toml build system for c and c++
 - [x] implement recursive building
 - [ ] progress bar, and more info
 - [ ] proper error system
-- [ ] workspace system
+- [x] workspace system
 - [x] dependency system
 - [ ] Build only changed files
