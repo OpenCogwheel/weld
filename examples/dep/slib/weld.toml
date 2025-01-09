@@ -1,0 +1,15 @@
+[project]
+name = "slib"
+type = "StaticLib"
+
+[lib]
+include_dir = "include"
+
+[files]
+cextensions = [".cpp"]
+
+[settings]
+toolset = "g++"
+
+src_dir = "src"
+out_dir = "bin"

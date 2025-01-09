@@ -7,8 +7,8 @@
 struct TOMLData {
     bool is_workspace = false;
     
-    std::string project_name, project_type;
-    std::string src_dir, out_dir;
+    std::string project_name, project_type, project_path;
+    std::string src_dir, out_dir, include_dir;
     std::string toolset;
     
     std::vector<std::string> cextensions, exclude;

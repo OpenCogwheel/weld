@@ -1,12 +1,17 @@
 #include "toml_reader.hpp"
 
-#include "toml.hpp"
 #include <cstdlib>
+#include <filesystem>
 #include <iostream>
 #include <vector>
 
+#include "toml.hpp"
+#include "dependencies.hpp"
+#include "weld.hpp"
+
 TOMLReader::TOMLReader(std::filesystem::path path) {
     auto weld_build_data = toml::parse(path.string() + "/weld.toml", toml::spec::v(1, 1, 0));
+    m_Data.project_path = path.string();
     
     if (weld_build_data.contains("project")) {
         auto project_settings = toml::find(weld_build_data, "project");
@@ -38,6 +43,23 @@ TOMLReader::TOMLReader(std::filesystem::path path) {
         m_Data.out_dir = "bin";
     }
     
+    if (weld_build_data.contains("lib")) {
+        if (m_Data.project_type == "SharedLib" || m_Data.project_type == "StaticLib") {
+            auto lib_settings = toml::find(weld_build_data, "lib");
+            
+            if (lib_settings.contains("include_dir")) {
+                m_Data.include_dir = toml::find<std::string>(lib_settings, "include_dir");
+            } else {
+                m_Data.include_dir = "src";
+            }
+        } else {
+            std::cerr << "error: lib header is only for libraries!" << std::endl;
+            exit(1);
+        }
+    } else {
+        m_Data.include_dir = "src";
+    }
+    
     if (weld_build_data.contains("files")) {
         auto file_settings = toml::find(weld_build_data, "files");
         
@@ -57,15 +79,55 @@ TOMLReader::TOMLReader(std::filesystem::path path) {
         if ((m_Data.toolset == "gcc" || m_Data.toolset == "g++")) {
             auto gnuc_settings = toml::find(weld_build_data, "gnuc");
             
-            if (gnuc_settings.contains("cflags")) {
-                m_Data.cflags = toml::find<std::vector<std::string>>(gnuc_settings, "cflags");
+            if (gnuc_settings.contains("cflags")) { 
+                std::vector<std::string> cflags = toml::find<std::vector<std::string>>(gnuc_settings, "cflags");
+                for (auto cflag : cflags) {
+                    m_Data.cflags.push_back(cflag);
+                }
             }
+            
             if (gnuc_settings.contains("lflags")) {
-                m_Data.lflags = toml::find<std::vector<std::string>>(gnuc_settings, "lflags");
+                std::vector<std::string> lflags = toml::find<std::vector<std::string>>(gnuc_settings, "cflags");
+                for (auto lflag : lflags) {
+                    m_Data.cflags.push_back(lflag);
+                }
             }
         } else {
             std::cerr << "error: gnuc requires toolset gcc or g++" << std::endl;
             exit(1);
         }
+    }
+    
+    Dependencies dependencies;
+    dependencies.read(path);
+    
+    for (std::tuple<std::string, bool> dep: dependencies.m_Dependencies) {
+        TOMLReader reader(m_Data.project_path + "/" + std::get<0>(dep));
+        TOMLData data = reader.get_data();
+        
+        if (data.toolset == "gcc" || data.toolset == "g++") {
+            build_project_gnuc(data);
+        }
+        
+        #ifdef __linux__
+            if (data.project_type == "SharedLib") {
+                if (std::get<1>(dep)) {
+                    m_Data.cflags.push_back("-I" + m_Data.project_path + "/" + std::get<0>(dep) + "/" + data.include_dir);
+                    m_Data.lflags.push_back("-I" + m_Data.project_path + "/" + std::get<0>(dep) + "/" + data.include_dir);
+                }
+                
+                m_Data.lflags.push_back("-L" + m_Data.project_path + "/" + std::get<0>(dep) + "/" + data.out_dir);
+                m_Data.lflags.push_back("-Wl,-rpath," + m_Data.project_path + "/" + std::get<0>(dep) + "/" + data.out_dir);
+                m_Data.lflags.push_back("-l" + data.project_name);
+            } else if (data.project_type == "StaticLib") {
+                if (std::get<1>(dep)) {
+                    m_Data.cflags.push_back("-I" + m_Data.project_path + "/" + std::get<0>(dep) + "/" + data.include_dir);
+                    m_Data.lflags.push_back("-I" + m_Data.project_path + "/" + std::get<0>(dep) + "/" + data.include_dir);
+                }
+                
+                m_Data.lflags.push_back("-L" + m_Data.project_path + "/" + std::get<0>(dep) + "/" + data.out_dir);
+                m_Data.lflags.push_back("-l" + data.project_name);
+            }
+        #endif
     }
 }

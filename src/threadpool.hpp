@@ -1,3 +1,5 @@
+#pragma once
+
 #include <vector>
 #include <future>
 #include <queue>
@@ -8,7 +10,8 @@
 
 class ThreadPool {
 public:
-    ThreadPool(size_t num_threads) : m_ActiveThreads(0) {
+    ThreadPool(size_t num_threads)
+        : m_ActiveThreads(0) {
         for (size_t i = 0; i < num_threads; ++i) {
             m_Workers.emplace_back([this]() {
                 while (true) {
