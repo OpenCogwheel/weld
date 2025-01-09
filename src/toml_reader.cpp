@@ -44,7 +44,9 @@ TOMLReader::TOMLReader(std::filesystem::path path) {
     }
     
     if (weld_build_data.contains("lib")) {
-        if (m_Data.project_type == "SharedLib" || m_Data.project_type == "StaticLib") {
+        if (m_Data.project_type == "SharedLib"
+            || m_Data.project_type == "StaticLib"
+            || m_Data.project_type == "Utility") {
             auto lib_settings = toml::find(weld_build_data, "lib");
             
             if (lib_settings.contains("include_dir")) {
@@ -105,7 +107,7 @@ TOMLReader::TOMLReader(std::filesystem::path path) {
         TOMLReader reader(m_Data.project_path + "/" + std::get<0>(dep));
         TOMLData data = reader.get_data();
         
-        if (data.toolset == "gcc" || data.toolset == "g++") {
+        if (data.toolset == "gcc" || data.toolset == "g++" || data.project_type != "Utility") {
             build_project_gnuc(data);
         }
         
@@ -127,6 +129,11 @@ TOMLReader::TOMLReader(std::filesystem::path path) {
                 
                 m_Data.lflags.push_back("-L" + m_Data.project_path + "/" + std::get<0>(dep) + "/" + data.out_dir);
                 m_Data.lflags.push_back("-l" + data.project_name);
+            } else if (data.project_type == "Utility") {
+                if (std::get<1>(dep)) {
+                    m_Data.cflags.push_back("-I" + m_Data.project_path + "/" + std::get<0>(dep) + "/" + data.include_dir);
+                    m_Data.lflags.push_back("-I" + m_Data.project_path + "/" + std::get<0>(dep) + "/" + data.include_dir);
+                }
             }
         #endif
     }

@@ -1,0 +1,18 @@
+[project]
+name = "app"
+type = "ConsoleApp"
+
+[files]
+cextensions = [".cpp"]
+
+[settings]
+toolset = "g++"
+src_dir = "src"
+out_dir = "bin"
+
+[gnuc]
+cflags = [""]
+lflags = [""]
+
+[dependencies]
+util = { path = "../util", include = true }

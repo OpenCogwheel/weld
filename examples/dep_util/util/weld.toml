@@ -1,0 +1,6 @@
+[project]
+name = "app"
+type = "Utility"
+
+[lib]
+include_dir = "include"
