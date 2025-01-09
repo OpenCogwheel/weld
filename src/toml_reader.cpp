@@ -9,7 +9,7 @@
 #include "dependencies.hpp"
 #include "weld.hpp"
 
-TOMLReader::TOMLReader(std::filesystem::path path) {
+TOMLReader::TOMLReader(std::filesystem::path path, bool member) {
     auto weld_build_data = toml::parse(path.string() + "/weld.toml", toml::spec::v(1, 1, 0));
     m_Data.project_path = path.string();
     
@@ -133,42 +133,6 @@ TOMLReader::TOMLReader(std::filesystem::path path) {
             exit(1);
         }
         
-        Dependencies dependencies;
-        dependencies.read(path);
-        
-        for (std::tuple<std::string, bool> dep: dependencies.m_Dependencies) {
-            TOMLReader reader(m_Data.project_path + "/" + std::get<0>(dep));
-            TOMLData data = reader.get_data();
-            
-            if (data.toolset == "gcc" || data.toolset == "g++" || data.project_type != "Utility") {
-                build_project_gnuc(data);
-            }
-            
-            #ifdef __linux__
-                if (data.project_type == "SharedLib") {
-                    if (std::get<1>(dep)) {
-                        m_Data.cflags.push_back("-I" + m_Data.project_path + "/" + std::get<0>(dep) + "/" + data.include_dir);
-                        m_Data.lflags.push_back("-I" + m_Data.project_path + "/" + std::get<0>(dep) + "/" + data.include_dir);
-                    }
-                    
-                    m_Data.lflags.push_back("-L" + m_Data.project_path + "/" + std::get<0>(dep) + "/" + data.out_dir);
-                    m_Data.lflags.push_back("-Wl,-rpath," + m_Data.project_path + "/" + std::get<0>(dep) + "/" + data.out_dir);
-                    m_Data.lflags.push_back("-l" + data.project_name);
-                } else if (data.project_type == "StaticLib") {
-                    if (std::get<1>(dep)) {
-                        m_Data.cflags.push_back("-I" + m_Data.project_path + "/" + std::get<0>(dep) + "/" + data.include_dir);
-                        m_Data.lflags.push_back("-I" + m_Data.project_path + "/" + std::get<0>(dep) + "/" + data.include_dir);
-                    }
-                    
-                    m_Data.lflags.push_back("-L" + m_Data.project_path + "/" + std::get<0>(dep) + "/" + data.out_dir);
-                    m_Data.lflags.push_back("-l" + data.project_name);
-                } else if (data.project_type == "Utility") {
-                    if (std::get<1>(dep)) {
-                        m_Data.cflags.push_back("-I" + m_Data.project_path + "/" + std::get<0>(dep) + "/" + data.include_dir);
-                        m_Data.lflags.push_back("-I" + m_Data.project_path + "/" + std::get<0>(dep) + "/" + data.include_dir);
-                    }
-                }
-            #endif
-        }
+        m_Data.deps.read(path);
     }
 }

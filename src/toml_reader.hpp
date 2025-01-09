@@ -1,5 +1,6 @@
 #pragma once
 
+#include "dependencies.hpp"
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -17,11 +18,13 @@ struct TOMLData {
     std::vector<std::string> cextensions, exclude;
     
     std::vector<std::string> cflags, lflags;
+    
+    Dependencies deps;
 };
 
 class TOMLReader {
 public:
-    TOMLReader(std::filesystem::path path);
+    TOMLReader(std::filesystem::path path, bool member);
 public:
     inline TOMLData &get_data() { return m_Data; }
 private:

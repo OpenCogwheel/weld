@@ -111,6 +111,43 @@ void build_project_gnuc(TOMLData data) {
     std::string gnuc_path = find_exec_path(data.toolset);
     
     exclude_files_and_folders(full_src_path, files, data.exclude);
+    
+    for (std::tuple<std::string, bool> dep : data.deps.m_Dependencies) {
+        TOMLReader dep_reader(data.project_path + "/" + std::get<0>(dep), false);
+        TOMLData dep_data = dep_reader.get_data();
+        
+        if (dep_data.project_type != "Utility") {
+            if (dep_data.toolset == "gcc" || dep_data.toolset == "g++") {
+                build_project_gnuc(dep_data);
+            }
+        }
+        
+        #ifdef __linux__
+            if (dep_data.project_type == "SharedLib") {
+                if (std::get<1>(dep)) {
+                    data.cflags.push_back("-I" + data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.include_dir);
+                    data.lflags.push_back("-I" + data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.include_dir);
+                }
+                
+                data.lflags.push_back("-L" + data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.out_dir);
+                data.lflags.push_back("-Wl,-rpath," + data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.out_dir);
+                data.lflags.push_back("-l" + dep_data.project_name);
+            } else if (dep_data.project_type == "StaticLib") {
+                if (std::get<1>(dep)) {
+                    data.cflags.push_back("-I" + data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.include_dir);
+                    data.lflags.push_back("-I" + data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.include_dir);
+                }
+                
+                data.lflags.push_back("-L" + data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.out_dir);
+                data.lflags.push_back("-l" + dep_data.project_name);
+            } else if (dep_data.project_type == "Utility") {
+                if (std::get<1>(dep)) {
+                    data.cflags.push_back("-I" + data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.include_dir);
+                    data.lflags.push_back("-I" + data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.include_dir);
+                }
+            }
+        #endif
+    }
 
     std::string out_name = data.project_name;
     #ifdef __linux__
@@ -127,7 +164,14 @@ void build_project_gnuc(TOMLData data) {
                 exit(1);
             }
         }
-
+        
+        for (auto &cflag : data.cflags) {
+            std::cout << cflag << std::endl;
+        }
+        
+        for (auto &lflag : data.lflags) {
+            std::cout << lflag << std::endl;
+        }
         
         for (auto &file : files) {
             std::filesystem::path out_file = file.filename(); out_file.replace_extension(".o");
@@ -183,8 +227,39 @@ void build_workspace_gnuc(TOMLData data) {
     
     for (std::string member : data.members) {
         std::string full_member_path = data.project_path + "/" + member;
-        TOMLReader member_reader(full_member_path);
+        TOMLReader member_reader(full_member_path, true);
         TOMLData member_data = member_reader.get_data();
+        
+        for (std::tuple<std::string, bool> dep : member_data.deps.m_Dependencies) {
+            TOMLReader dep_reader(member_data.project_path + "/" + std::get<0>(dep), false);
+            TOMLData dep_data = dep_reader.get_data();
+            
+            #ifdef __linux__
+                if (dep_data.project_type == "SharedLib") {
+                    if (std::get<1>(dep)) {
+                        member_data.cflags.push_back("-I" + member_data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.include_dir);
+                        member_data.lflags.push_back("-I" + member_data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.include_dir);
+                    }
+                    
+                    member_data.lflags.push_back("-L" + full_out_path + "/" + dep_data.project_name);
+                    member_data.lflags.push_back("-Wl,-rpath," + full_out_path + "/" + dep_data.project_name);
+                    member_data.lflags.push_back("-l" + dep_data.project_name);
+                } else if (dep_data.project_type == "StaticLib") {
+                    if (std::get<1>(dep)) {
+                        member_data.cflags.push_back("-I" + member_data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.include_dir);
+                        member_data.lflags.push_back("-I" + member_data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.include_dir);
+                    }
+                    
+                    member_data.lflags.push_back("-L" + full_out_path + "/" + dep_data.project_name);
+                    member_data.lflags.push_back("-l" + dep_data.project_name);
+                } else if (dep_data.project_type == "Utility") {
+                    if (std::get<1>(dep)) {
+                        member_data.cflags.push_back("-I" + member_data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.include_dir);
+                        member_data.lflags.push_back("-I" + member_data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.include_dir);
+                    }
+                }
+            #endif
+        }
         
         std::string gnuc_path = find_exec_path(member_data.toolset);
         

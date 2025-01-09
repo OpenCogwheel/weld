@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
     char *program = shift(argc, &argv);
     
     if (argc < 1) {
-        TOMLReader toml_reader(std::filesystem::current_path());
+        TOMLReader toml_reader(std::filesystem::current_path(), false);
         if (toml_reader.get_data().is_workspace == true) {
             TOMLData data = toml_reader.get_data();
             build_workspace(data);

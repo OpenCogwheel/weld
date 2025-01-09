@@ -1,5 +1,5 @@
-#include <iostream>
+#include "print.hpp"
 
 int main() {
-    std::cout << "Hello!" << std::endl;
+    print("Hello, workspace!");
 }
