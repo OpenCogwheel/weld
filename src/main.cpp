@@ -1,6 +1,8 @@
 #include "command.hpp"
 #include "toml_reader.hpp"
 #include "weld.hpp"
+#include <cstdlib>
+#include <filesystem>
 
 void build_project(TOMLData data) {
     if (data.toolset == "gcc" || data.toolset == "g++") {
@@ -25,8 +27,8 @@ int main(int argc, char **argv) {
     char *program = shift(argc, &argv);
     
     if (argc < 1) {
-        TOMLReader toml_reader(std::filesystem::current_path(), false);
-        if (toml_reader.get_data().is_workspace == true) {
+        TOMLReader toml_reader(std::filesystem::current_path());
+        if (toml_reader.get_data().is_workspace) {
             TOMLData data = toml_reader.get_data();
             build_workspace(data);
         } else {
@@ -38,6 +40,31 @@ int main(int argc, char **argv) {
         }
         
         char *subcommand = shift(argc, &argv);
+        
+        if (std::string(subcommand) == "install") {
+            TOMLReader toml_reader(std::filesystem::current_path());
+            TOMLData data = toml_reader.get_data();
+            
+            if (data.can_install) {
+                if (toml_reader.get_data().is_workspace) {
+                    std::cout << "error: install for workspaces isn't supported yet!" << std::endl;
+                    exit(1);
+                } else {
+                    build_project(data);
+                }
+                
+                #ifdef __linux__
+                    Commands::run(
+                        "sudo", find_exec_path("cp"), "-i",
+                        data.project_path + "/" + data.out_dir + "/" + data.project_name,
+                        data.binary_install_path
+                    );
+                #endif
+            } else {
+                std::cerr << "error: this project doesnt support installation!" << std::endl;
+                exit(1);
+            }
+        }
         
         if (std::string(subcommand) == "new") {
             std::string toolset = "gcc";
@@ -61,5 +88,4 @@ int main(int argc, char **argv) {
             create_project(toolset, project_name);
         }
     }
-    
 }

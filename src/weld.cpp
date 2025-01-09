@@ -2,6 +2,7 @@
 #include "command.hpp"
 #include "toml_reader.hpp"
 #include <algorithm>
+#include <cstdlib>
 #include <filesystem>
 
 std::vector<std::filesystem::path> get_args_with_extensions(const std::filesystem::path& dir, const std::vector<std::string>& extensions) {
@@ -94,6 +95,67 @@ void exclude_files_and_folders(
     }
 }
 
+void build_and_add_dep(std::tuple<std::string, bool> &dep, TOMLData &data, TOMLData &dep_data) {
+    #ifdef __linux__
+        if (dep_data.project_type == "SharedLib") {
+            if (std::get<1>(dep)) {
+                data.cflags.push_back("-I" + data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.include_dir);
+                data.lflags.push_back("-I" + data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.include_dir);
+            }
+            
+            data.lflags.push_back("-L" + data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.out_dir);
+            data.lflags.push_back("-Wl,-rpath," + data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.out_dir);
+            data.lflags.push_back("-l" + dep_data.project_name);
+        } else if (dep_data.project_type == "StaticLib") {
+            if (std::get<1>(dep)) {
+                data.cflags.push_back("-I" + data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.include_dir);
+                data.lflags.push_back("-I" + data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.include_dir);
+            }
+            
+            data.lflags.push_back("-L" + data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.out_dir);
+            data.lflags.push_back("-l" + dep_data.project_name);
+        } else if (dep_data.project_type == "Utility") {
+            if (std::get<1>(dep)) {
+                data.cflags.push_back("-I" + data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.include_dir);
+                data.lflags.push_back("-I" + data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.include_dir);
+            }
+        }
+    #endif
+}
+
+void build_and_add_dep_member(
+    std::tuple<std::string, bool> &dep,
+    TOMLData &member_data,
+    TOMLData &dep_data,
+    std::string &full_out_path
+) {
+    #ifdef __linux__
+        if (dep_data.project_type == "SharedLib") {
+            if (std::get<1>(dep)) {
+                member_data.cflags.push_back("-I" + member_data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.include_dir);
+                member_data.lflags.push_back("-I" + member_data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.include_dir);
+            }
+            
+            member_data.lflags.push_back("-L" + full_out_path + "/" + dep_data.project_name);
+            member_data.lflags.push_back("-Wl,-rpath," + full_out_path + "/" + dep_data.project_name);
+            member_data.lflags.push_back("-l" + dep_data.project_name);
+        } else if (dep_data.project_type == "StaticLib") {
+            if (std::get<1>(dep)) {
+                member_data.cflags.push_back("-I" + member_data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.include_dir);
+                member_data.lflags.push_back("-I" + member_data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.include_dir);
+            }
+            
+            member_data.lflags.push_back("-L" + full_out_path + "/" + dep_data.project_name);
+            member_data.lflags.push_back("-l" + dep_data.project_name);
+        } else if (dep_data.project_type == "Utility") {
+            if (std::get<1>(dep)) {
+                member_data.cflags.push_back("-I" + member_data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.include_dir);
+                member_data.lflags.push_back("-I" + member_data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.include_dir);
+            }
+        }
+    #endif
+}
+
 void build_project_gnuc(TOMLData data) {
     std::string full_src_path = data.project_path + "/" + data.src_dir;
     std::string full_out_path = data.project_path + "/" + data.out_dir;
@@ -113,7 +175,7 @@ void build_project_gnuc(TOMLData data) {
     exclude_files_and_folders(full_src_path, files, data.exclude);
     
     for (std::tuple<std::string, bool> dep : data.deps.m_Dependencies) {
-        TOMLReader dep_reader(data.project_path + "/" + std::get<0>(dep), false);
+        TOMLReader dep_reader(data.project_path + "/" + std::get<0>(dep));
         TOMLData dep_data = dep_reader.get_data();
         
         if (dep_data.project_type != "Utility") {
@@ -122,31 +184,7 @@ void build_project_gnuc(TOMLData data) {
             }
         }
         
-        #ifdef __linux__
-            if (dep_data.project_type == "SharedLib") {
-                if (std::get<1>(dep)) {
-                    data.cflags.push_back("-I" + data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.include_dir);
-                    data.lflags.push_back("-I" + data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.include_dir);
-                }
-                
-                data.lflags.push_back("-L" + data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.out_dir);
-                data.lflags.push_back("-Wl,-rpath," + data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.out_dir);
-                data.lflags.push_back("-l" + dep_data.project_name);
-            } else if (dep_data.project_type == "StaticLib") {
-                if (std::get<1>(dep)) {
-                    data.cflags.push_back("-I" + data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.include_dir);
-                    data.lflags.push_back("-I" + data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.include_dir);
-                }
-                
-                data.lflags.push_back("-L" + data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.out_dir);
-                data.lflags.push_back("-l" + dep_data.project_name);
-            } else if (dep_data.project_type == "Utility") {
-                if (std::get<1>(dep)) {
-                    data.cflags.push_back("-I" + data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.include_dir);
-                    data.lflags.push_back("-I" + data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.include_dir);
-                }
-            }
-        #endif
+        build_and_add_dep(dep, data, dep_data);
     }
 
     std::string out_name = data.project_name;
@@ -163,14 +201,6 @@ void build_project_gnuc(TOMLData data) {
                 std::cerr << "error: invalid project type!" << std::endl;
                 exit(1);
             }
-        }
-        
-        for (auto &cflag : data.cflags) {
-            std::cout << cflag << std::endl;
-        }
-        
-        for (auto &lflag : data.lflags) {
-            std::cout << lflag << std::endl;
         }
         
         for (auto &file : files) {
@@ -227,38 +257,27 @@ void build_workspace_gnuc(TOMLData data) {
     
     for (std::string member : data.members) {
         std::string full_member_path = data.project_path + "/" + member;
-        TOMLReader member_reader(full_member_path, true);
+        TOMLReader member_reader(full_member_path);
         TOMLData member_data = member_reader.get_data();
         
         for (std::tuple<std::string, bool> dep : member_data.deps.m_Dependencies) {
-            TOMLReader dep_reader(member_data.project_path + "/" + std::get<0>(dep), false);
+            TOMLReader dep_reader(member_data.project_path + "/" + std::get<0>(dep));
             TOMLData dep_data = dep_reader.get_data();
             
-            #ifdef __linux__
-                if (dep_data.project_type == "SharedLib") {
-                    if (std::get<1>(dep)) {
-                        member_data.cflags.push_back("-I" + member_data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.include_dir);
-                        member_data.lflags.push_back("-I" + member_data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.include_dir);
-                    }
-                    
-                    member_data.lflags.push_back("-L" + full_out_path + "/" + dep_data.project_name);
-                    member_data.lflags.push_back("-Wl,-rpath," + full_out_path + "/" + dep_data.project_name);
-                    member_data.lflags.push_back("-l" + dep_data.project_name);
-                } else if (dep_data.project_type == "StaticLib") {
-                    if (std::get<1>(dep)) {
-                        member_data.cflags.push_back("-I" + member_data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.include_dir);
-                        member_data.lflags.push_back("-I" + member_data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.include_dir);
-                    }
-                    
-                    member_data.lflags.push_back("-L" + full_out_path + "/" + dep_data.project_name);
-                    member_data.lflags.push_back("-l" + dep_data.project_name);
-                } else if (dep_data.project_type == "Utility") {
-                    if (std::get<1>(dep)) {
-                        member_data.cflags.push_back("-I" + member_data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.include_dir);
-                        member_data.lflags.push_back("-I" + member_data.project_path + "/" + std::get<0>(dep) + "/" + dep_data.include_dir);
+            if (std::find(data.members.begin(), data.members.end(), dep_data.project_name) == data.members.end()) {
+                if (dep_data.project_type != "Utility") {
+                    if (dep_data.toolset == "gcc" || dep_data.toolset == "g++") {
+                        build_project_gnuc(dep_data);
+                    } else {
+                        std::cerr << "error: invalid toolset in " + dep_data.project_name << std::endl;
+                        exit(1);
                     }
                 }
-            #endif
+                
+                build_and_add_dep(dep, member_data, dep_data);
+            } else {
+                build_and_add_dep_member(dep, member_data, dep_data, full_out_path);
+            }
         }
         
         std::string gnuc_path = find_exec_path(member_data.toolset);

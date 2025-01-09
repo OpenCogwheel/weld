@@ -7,9 +7,8 @@
 
 #include "toml.hpp"
 #include "dependencies.hpp"
-#include "weld.hpp"
 
-TOMLReader::TOMLReader(std::filesystem::path path, bool member) {
+TOMLReader::TOMLReader(std::filesystem::path path) {
     auto weld_build_data = toml::parse(path.string() + "/weld.toml", toml::spec::v(1, 1, 0));
     m_Data.project_path = path.string();
     
@@ -124,6 +123,16 @@ TOMLReader::TOMLReader(std::filesystem::path path, bool member) {
         } else {
             std::cerr << "error: gnuc requires toolset gcc or g++" << std::endl;
             exit(1);
+        }
+    }
+    
+    if (weld_build_data.contains("install")) {
+        if (m_Data.project_type == "ConsoleApp") {
+            auto install_settings = toml::find(weld_build_data, "install");
+            m_Data.can_install = true;
+            m_Data.binary_install_path = toml::find<std::string>(install_settings, "install_path");
+        } else {
+            std::cerr << "error: install available only for ConsoleApps!" << std::endl;
         }
     }
     

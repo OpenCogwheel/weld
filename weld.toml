@@ -14,3 +14,6 @@ out_dir = "bin"
 
 [gnuc]
 cflags = ["-O3"]
+
+[install]
+install_path = "/usr/bin"

@@ -11,5 +11,6 @@ A cargo inspired toml build system for c and c++
 - [ ] proper error system
 - [x] workspace system
 - [x] dependency system
-- [ ] project install system
+- [x] project install system
+    - [ ] Add more customizability
 - [ ] build only changed files
