@@ -55,7 +55,7 @@ int main(int argc, char **argv) {
                 
                 #ifdef __linux__
                     Commands::run(
-                        "sudo", find_exec_path("cp"), "-i",
+                        "sudo", "-k", find_exec_path("cp"), "-i",
                         data.project_path + "/" + data.out_dir + "/" + data.project_name,
                         data.binary_install_path
                     );

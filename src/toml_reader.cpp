@@ -5,6 +5,7 @@
 #include <iostream>
 #include <vector>
 
+#include "command.hpp"
 #include "toml.hpp"
 #include "dependencies.hpp"
 
@@ -52,6 +53,21 @@ TOMLReader::TOMLReader(std::filesystem::path path) {
     } else {
         m_Data.src_dir = "src";
         m_Data.out_dir = "bin";
+    }
+    
+    if (weld_build_data.contains("build")) {
+        auto build_settings = toml::find(weld_build_data, "build");
+        
+        if (build_settings.contains("commands")) {
+            auto commands = toml::find<std::vector<toml::value>>(build_settings, "commands");
+            
+            for (auto &cmd : commands) {
+                TOMLCommand command;
+                command.stage = toml::find<int>(cmd, "stage");
+                command.cmds = toml::find<std::vector<std::string>>(cmd, "cmds");
+                m_Data.build_commands.push_back(command);
+            }
+        }
     }
     
     if (weld_build_data.contains("lib")) {

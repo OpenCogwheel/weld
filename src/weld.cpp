@@ -1,9 +1,12 @@
-#include "weld.hpp"
-#include "command.hpp"
-#include "toml_reader.hpp"
 #include <algorithm>
 #include <cstdlib>
 #include <filesystem>
+#include <future>
+
+#include "weld.hpp"
+#include "command.hpp"
+#include "threadpool.hpp"
+#include "toml_reader.hpp"
 
 std::vector<std::filesystem::path> get_args_with_extensions(const std::filesystem::path& dir, const std::vector<std::string>& extensions) {
     std::vector<std::filesystem::path> result;
@@ -156,6 +159,17 @@ void build_and_add_dep_member(
     #endif
 }
 
+inline void run_build_commands(const size_t stage, TOMLData data) {
+    auto bcmds = std::find_if(data.build_commands.begin(), data.build_commands.end(),
+        [](const TOMLCommand& cmd) { return cmd.stage == 0; });
+    
+    if (bcmds != data.build_commands.end()) {
+        for (const auto& command : bcmds->cmds) {
+            Commands::run(command);
+        }
+    }
+}
+
 void build_project_gnuc(TOMLData data) {
     std::string full_src_path = data.project_path + "/" + data.src_dir;
     std::string full_out_path = data.project_path + "/" + data.out_dir;
@@ -186,6 +200,8 @@ void build_project_gnuc(TOMLData data) {
         
         build_and_add_dep(dep, data, dep_data);
     }
+    
+    run_build_commands(0, data);
 
     std::string out_name = data.project_name;
     #ifdef __linux__
@@ -220,6 +236,8 @@ void build_project_gnuc(TOMLData data) {
         
         pool.get();
         
+        run_build_commands(1, data);
+        
         for (auto &file : files) {
             file = std::filesystem::path(full_out_path + "/genobjs/").concat(file.filename().replace_extension(".o").string());
         }
@@ -244,6 +262,8 @@ void build_project_gnuc(TOMLData data) {
             std::cout << "Finished Linking" << std::endl;
         }
     #endif
+    
+    run_build_commands(2, data);
 }
 
 void build_workspace_gnuc(TOMLData data) {
@@ -279,6 +299,8 @@ void build_workspace_gnuc(TOMLData data) {
                 build_and_add_dep_member(dep, member_data, dep_data, full_out_path);
             }
         }
+        
+        run_build_commands(0, data);
         
         std::string gnuc_path = find_exec_path(member_data.toolset);
         
@@ -326,6 +348,8 @@ void build_workspace_gnuc(TOMLData data) {
             
             pool.get();
             
+            run_build_commands(1, data);
+            
             for (auto &file : files) {
                 file = std::filesystem::path(full_member_out_path + "/genobjs/").concat(file.filename().replace_extension(".o").string());
             }
@@ -350,6 +374,8 @@ void build_workspace_gnuc(TOMLData data) {
                 std::cout << "Finished Linking" << std::endl;
             }
         #endif
+        
+        run_build_commands(2, data);
     }
 }
 

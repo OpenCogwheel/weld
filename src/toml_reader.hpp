@@ -5,10 +5,18 @@
 #include <string>
 #include <vector>
 
+struct TOMLCommand {
+    int stage;
+    std::vector<std::string> cmds;
+};
+
 struct TOMLData {
     // Workspace stuff
     bool is_workspace = false;
     std::vector<std::string> members;
+    
+    // Build stuff
+    std::vector<TOMLCommand> build_commands;
 
     // Project stuff
     std::string project_name, project_type, project_path;

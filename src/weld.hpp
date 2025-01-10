@@ -1,17 +1,12 @@
     #pragma once
 
 #include <cstdlib>
-#include <iostream>
 #include <string>
 #include <vector>
-#include <algorithm>
 #include <filesystem>
 #include <cassert>
-#include <fstream>
 
 #include "toml_reader.hpp"
-#include "command.hpp"
-#include "threadpool.hpp"
 
 std::vector<std::filesystem::path> get_args_with_extensions(const std::filesystem::path& dir, const std::vector<std::string>& extensions);
 
