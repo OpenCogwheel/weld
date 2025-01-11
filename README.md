@@ -26,3 +26,5 @@ $ cmake --build bin
 ```
 $ weld install
 ```
+
+#### For more information go to the WIKI: [Weld Wiki](https://github.com/OpenCogwheel/weld/wiki)
