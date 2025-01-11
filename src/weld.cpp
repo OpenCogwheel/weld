@@ -161,7 +161,7 @@ void build_and_add_dep_member(
 
 inline void run_build_commands(const size_t stage, TOMLData data) {
     auto bcmds = std::find_if(data.build_commands.begin(), data.build_commands.end(),
-        [](const TOMLCommand& cmd) { return cmd.stage == 0; });
+        [stage](const TOMLCommand& cmd) { return cmd.stage == stage; });
     
     if (bcmds != data.build_commands.end()) {
         for (const auto& command : bcmds->cmds) {
@@ -221,6 +221,20 @@ void build_project_gnuc(TOMLData data) {
         
         for (auto &file : files) {
             std::filesystem::path out_file = file.filename(); out_file.replace_extension(".o");
+            // if (std::filesystem::exists(data.project_path + "/" + data.out_dir)
+            //     && std::filesystem::exists(data.project_path + "/" + data.out_dir + "/genobjs")) {
+            //     if (std::filesystem::exists(
+            //         data.project_path + "/" + data.out_dir
+            //         + "/genobjs/" + out_file.string()
+            //     )) {
+            //         std::filesystem::path outf = data.project_path + "/" + data.out_dir
+            //             + "/genobjs/" + out_file.string();
+                    
+            //         if (std::filesystem::last_write_time(outf) > std::filesystem::last_write_time(file))
+            //             continue;
+            //     }
+            // }
+            
             std::cout << "Building ---> " + file.filename().string() + "\n";
             pool.enqueue([=]() {
                 Commands::run(
@@ -228,6 +242,13 @@ void build_project_gnuc(TOMLData data) {
                     data.cflags,
                     "-c", file,
                     "-o", full_out_path + "/genobjs/" + out_file.string()
+                );
+                
+                Commands::run(
+                    gnuc_path,
+                    "-MM",
+                    file,
+                    ">>", full_out_path + "/" + data.project_name + ".d"
                 );
                 
                 std::cout << "Finished ---> " << out_file.string() << std::endl;

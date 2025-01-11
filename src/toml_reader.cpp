@@ -5,7 +5,6 @@
 #include <iostream>
 #include <vector>
 
-#include "command.hpp"
 #include "toml.hpp"
 #include "dependencies.hpp"
 
